@@ -1,3 +1,4 @@
+import json
 import cv2
 import numpy as np
 import time
@@ -6,25 +7,12 @@ import threading
 
 class LaserTracker:
     def __init__(self):
+
+        # 存储json地址
+        self.hsv_config_path = 'hsv_values.json'
+
         # 初始化HSV阈值（与原逻辑相同）
-        self.hsv_values = {
-            'black': {
-                'low': np.array([0, 0, 0]),
-                'high': np.array([180, 255, 60])
-            },
-            'red1': {
-                'low': np.array([0, 150, 150]),
-                'high': np.array([10, 255, 255])
-            },
-            'red2': {
-                'low': np.array([170, 150, 150]),
-                'high': np.array([180, 255, 255])
-            },
-            'green': {
-                'low': np.array([45, 150, 150]),
-                'high': np.array([75, 255, 255])
-            }
-        }
+        self.hsv_values = self.load_hsv_values(self.hsv_config_path)
 
         # 初始化存储变量
         self.outer_rect = None
@@ -56,6 +44,22 @@ class LaserTracker:
 
         # 处理过的帧用于在界面上显示（可能是带有信息绘制后的帧）
         self.display_frame = None
+
+    def load_hsv_values(self, file_path):
+        """从文件加载 HSV 阈值"""
+        try:
+            with open(file_path, 'r') as file:
+                hsv_data = json.load(file)
+
+            # 将列表转换为 NumPy 数组
+            for key, value in hsv_data.items():
+                hsv_data[key]['low'] = np.array(hsv_data[key]['low'])
+                hsv_data[key]['high'] = np.array(hsv_data[key]['high'])
+
+            return hsv_data
+        except Exception as e:
+            print(f"Error loading HSV values: {e}")
+            return None
 
     def create_trackbars(self):
         """创建HSV调节滑块"""
@@ -304,6 +308,19 @@ class LaserTracker:
             else:
                 return "between"
 
+    def save_hsv_to_json(self, file_path):
+        """将当前 HSV 阈值保存到 JSON 文件"""
+        # 将 numpy.ndarray 转换为 list
+        hsv_values_serializable = {
+            key: {
+                sub_key: value.tolist() for sub_key, value in sub_dict.items()
+            } for key, sub_dict in self.hsv_values.items()
+        }
+
+        # 保存到 JSON 文件
+        with open(file_path, 'w') as json_file:
+            json.dump(hsv_values_serializable, json_file, indent=4)
+
     def run(self):
         """
         主线程负责：
@@ -340,10 +357,14 @@ class LaserTracker:
             if display_copy is not None:
                 cv2.imshow('Result', display_copy)
 
-
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('q'):  # 按 Q 退出程序
                 self.running = False
                 break
+            elif key == ord('s'):  # 按 S 保存当前 HSV 值到 JSON 文件
+                with self.lock:
+                    self.save_hsv_to_json(self.hsv_config_path)
+                    print("HSV 阈值已保存到 json 文件。")
 
         # 等待处理线程结束
         processing_thread.join()

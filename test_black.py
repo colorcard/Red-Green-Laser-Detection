@@ -1,3 +1,4 @@
+import json
 import cv2
 import numpy as np
 import time
@@ -6,13 +7,11 @@ import threading
 
 class LaserTracker:
     def __init__(self):
-        # 初始化 HSV 阈值
-        self.hsv_values = {
-            'black': {
-                'low': np.array([0, 0, 0]),    # 黑色区域
-                'high': np.array([180, 70, 60]) # 黑色上限
-            }
-        }
+        # 存储json地址
+        self.hsv_config_path = 'hsv_values.json'
+
+        # 初始化HSV阈值（与原逻辑相同）
+        self.hsv_values = self.load_hsv_values(self.hsv_config_path)
 
         # 性能追踪变量
         self.frame_count = 0
@@ -43,6 +42,22 @@ class LaserTracker:
         # 存储从主线程读取到的 HSV 阈值，以供处理线程访问
         self.current_hsv_low = self.hsv_values['black']['low'].copy()
         self.current_hsv_high = self.hsv_values['black']['high'].copy()
+
+    def load_hsv_values(self, file_path):
+        """从文件加载 HSV 阈值"""
+        try:
+            with open(file_path, 'r') as file:
+                hsv_data = json.load(file)
+
+            # 将列表转换为 NumPy 数组
+            for key, value in hsv_data.items():
+                hsv_data[key]['low'] = np.array(hsv_data[key]['low'])
+                hsv_data[key]['high'] = np.array(hsv_data[key]['high'])
+
+            return hsv_data
+        except Exception as e:
+            print(f"Error loading HSV values: {e}")
+            return None
 
     def create_trackbars(self):
         """在窗口中创建 Trackbar 用于动态调节 HSV 阈值"""
@@ -202,6 +217,19 @@ class LaserTracker:
             else:
                 time.sleep(0.001)
 
+    def save_hsv_to_json(self, file_path):
+        """将当前 HSV 阈值保存到 JSON 文件"""
+        # 将 numpy.ndarray 转换为 list
+        hsv_values_serializable = {
+            key: {
+                sub_key: value.tolist() for sub_key, value in sub_dict.items()
+            } for key, sub_dict in self.hsv_values.items()
+        }
+
+        # 保存到 JSON 文件
+        with open(file_path, 'w') as json_file:
+            json.dump(hsv_values_serializable, json_file, indent=4)
+
     def run(self):
         """
         主线程：负责显示结果帧 (display_frame) 和黑色掩码 (mask_for_display)，
@@ -233,10 +261,15 @@ class LaserTracker:
             if mask_for_display is not None:
                 cv2.imshow(self.mask_window, mask_for_display)
 
-            # 检测退出事件
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('q'):  # 按 Q 退出程序
                 self.running = False
                 break
+            elif key == ord('s'):  # 按 S 保存当前 HSV 值到 JSON 文件
+                with self.lock:
+                    self.save_hsv_to_json(self.hsv_config_path)
+                    print("HSV 阈值已保存到 json 文件。")
 
         # 等待其他线程结束，并释放资源
         t1.join()

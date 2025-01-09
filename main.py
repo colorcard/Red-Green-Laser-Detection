@@ -7,46 +7,13 @@ from datetime import datetime
 
 
 class LaserTracker:
-    def __init__(self,hsv_config_path='hsv_values.json'):
+    def __init__(self):
 
-        # 初始化HSV阈值
-        self.hsv_values =self.load_hsv_values(hsv_config_path)
-        #     {
-        #
-        #
-        #     #适合高纯度
-        #     'black': {
-        #         'low': np.array([0, 0, 0]),  # 黑色区域
-        #         'high': np.array([180, 255, 60])  # 黑色上限
-        #     },
-        #
-        #     # #适合测试样例的HSV设置
-        #     # 'black': {
-        #     #     'low': np.array([33, 20, 53]),
-        #     #     'high': np.array([150, 147, 219])
-        #     # },
-        #
-        #
-        #
-        #     'red1': {
-        #         'low': np.array([0, 150, 150]),  # 红色激光笔第一区间
-        #         'high': np.array([10, 255, 255])
-        #     },
-        #     'red2': {
-        #         'low': np.array([170, 150, 150]),  # 红色激光笔第二区间
-        #         'high': np.array([180, 255, 255])
-        #     },
-        #
-        #
-        #
-        #
-        #     'green': {
-        #         'low': np.array([45, 150, 150]),  # 绿色激光笔
-        #         'high': np.array([75, 255, 255])
-        #     }
-        #
-        #
-        # }
+        # 存储json地址
+        self.hsv_config_path = 'hsv_values.json'
+
+        # 初始化HSV阈值（与原逻辑相同）
+        self.hsv_values = self.load_hsv_values(self.hsv_config_path)
 
         # 初始化存储变量
         self.outer_rect = None
@@ -332,6 +299,19 @@ class LaserTracker:
             # 如果没有检测到内框，仅判断外框
             return "inside" if outer_result > 0 else "outside" if outer_result < 0 else "between"
 
+    def save_hsv_to_json(self, file_path):
+        """将当前 HSV 阈值保存到 JSON 文件"""
+        # 将 numpy.ndarray 转换为 list
+        hsv_values_serializable = {
+            key: {
+                sub_key: value.tolist() for sub_key, value in sub_dict.items()
+            } for key, sub_dict in self.hsv_values.items()
+        }
+
+        # 保存到 JSON 文件
+        with open(file_path, 'w') as json_file:
+            json.dump(hsv_values_serializable, json_file, indent=4)
+
     def run(self):
         """主循环"""
         while True:
@@ -347,13 +327,19 @@ class LaserTracker:
 
             cv2.imshow('Result', frame)
 
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+            # 监听键盘输入
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('q'):  # 按 Q 退出程序
                 break
+            elif key == ord('s'):  # 按 S 保存当前 HSV 值到 JSON 文件
+                self.save_hsv_to_json(self.hsv_config_path)
+                print("HSV 阈值已保存到 json 文件。")
 
         self.cap.release()
         cv2.destroyAllWindows()
         # if self.ser:
         #     self.ser.close()
+
 
 
 if __name__ == "__main__":
