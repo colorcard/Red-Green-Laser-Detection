@@ -1,3 +1,4 @@
+import json
 import cv2
 import numpy as np
 # import serial
@@ -6,45 +7,46 @@ from datetime import datetime
 
 
 class LaserTracker:
-    def __init__(self):
+    def __init__(self,hsv_config_path='hsv_values.json'):
 
         # 初始化HSV阈值
-        self.hsv_values = {
-
-
-            #适合高纯度
-            'black': {
-                'low': np.array([0, 0, 0]),  # 黑色区域
-                'high': np.array([180, 255, 60])  # 黑色上限
-            },
-
-            # #适合测试样例的HSV设置
-            # 'black': {
-            #     'low': np.array([33, 20, 53]),
-            #     'high': np.array([150, 147, 219])
-            # },
-
-
-
-            'red1': {
-                'low': np.array([0, 150, 150]),  # 红色激光笔第一区间
-                'high': np.array([10, 255, 255])
-            },
-            'red2': {
-                'low': np.array([170, 150, 150]),  # 红色激光笔第二区间
-                'high': np.array([180, 255, 255])
-            },
-
-
-
-
-            'green': {
-                'low': np.array([45, 150, 150]),  # 绿色激光笔
-                'high': np.array([75, 255, 255])
-            }
-
-
-        }
+        self.hsv_values =self.load_hsv_values(hsv_config_path)
+        #     {
+        #
+        #
+        #     #适合高纯度
+        #     'black': {
+        #         'low': np.array([0, 0, 0]),  # 黑色区域
+        #         'high': np.array([180, 255, 60])  # 黑色上限
+        #     },
+        #
+        #     # #适合测试样例的HSV设置
+        #     # 'black': {
+        #     #     'low': np.array([33, 20, 53]),
+        #     #     'high': np.array([150, 147, 219])
+        #     # },
+        #
+        #
+        #
+        #     'red1': {
+        #         'low': np.array([0, 150, 150]),  # 红色激光笔第一区间
+        #         'high': np.array([10, 255, 255])
+        #     },
+        #     'red2': {
+        #         'low': np.array([170, 150, 150]),  # 红色激光笔第二区间
+        #         'high': np.array([180, 255, 255])
+        #     },
+        #
+        #
+        #
+        #
+        #     'green': {
+        #         'low': np.array([45, 150, 150]),  # 绿色激光笔
+        #         'high': np.array([75, 255, 255])
+        #     }
+        #
+        #
+        # }
 
         # 初始化存储变量
         self.outer_rect = None
@@ -78,6 +80,22 @@ class LaserTracker:
         self.rectangle = None
         self.red_point = None
         self.green_point = None
+
+    def load_hsv_values(self, file_path):
+        """从文件加载 HSV 阈值"""
+        try:
+            with open(file_path, 'r') as file:
+                hsv_data = json.load(file)
+
+            # 将列表转换为 NumPy 数组
+            for key, value in hsv_data.items():
+                hsv_data[key]['low'] = np.array(hsv_data[key]['low'])
+                hsv_data[key]['high'] = np.array(hsv_data[key]['high'])
+
+            return hsv_data
+        except Exception as e:
+            print(f"Error loading HSV values: {e}")
+            return None
 
     def create_trackbars(self):
         """创建HSV调节滑块"""
@@ -276,10 +294,13 @@ class LaserTracker:
         if contours:
             max_contour = max(contours, key=cv2.contourArea)
             M = cv2.moments(max_contour)
+
+            # 求相关质心，不用霍夫圆变换的原因是，激光点极易HSV识别下成为不规则点块，霍夫圆变换极易识别失败
             if M["m00"] != 0:
                 cx = int(M["m10"] / M["m00"])
                 cy = int(M["m01"] / M["m00"])
                 return (cx, cy)
+
         return None
 
     def check_point_position(self, point, rectangle):

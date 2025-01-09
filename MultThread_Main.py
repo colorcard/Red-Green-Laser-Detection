@@ -263,13 +263,17 @@ class LaserTracker:
     def detect_laser(self, mask):
         """检测激光点，对应红色或绿色"""
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
         if contours:
             max_contour = max(contours, key=cv2.contourArea)
+
+            # 求相关质心
             M = cv2.moments(max_contour)
             if M["m00"] != 0:
                 cx = int(M["m10"] / M["m00"])
                 cy = int(M["m01"] / M["m00"])
                 return (cx, cy)
+
         return None
 
     def check_point_position(self, point, rectangle):
@@ -330,9 +334,12 @@ class LaserTracker:
             with self.lock:
                 if self.display_frame is not None:
                     display_copy = self.display_frame.copy()
+            # 需要考虑共享访问的问题，所以说先给 self.display_frame 复制出来再显示，否则可能会出问题
+
 
             if display_copy is not None:
                 cv2.imshow('Result', display_copy)
+
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 self.running = False
