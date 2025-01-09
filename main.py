@@ -38,8 +38,13 @@ class LaserTracker:
         #     print("串口连接失败")
         #     self.ser = None
 
+        # setting.json 设置文件
+        with open('setting.json', 'r') as json_file:
+            data = json.load(json_file)
+        url=data["url"] # 摄像头配置
+
         # 初始化摄像头
-        self.cap = cv2.VideoCapture(1)
+        self.cap = cv2.VideoCapture(url)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)  # 降低分辨率提高性能
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
@@ -301,6 +306,7 @@ class LaserTracker:
 
     def save_hsv_to_json(self, file_path):
         """将当前 HSV 阈值保存到 JSON 文件"""
+
         # 将 numpy.ndarray 转换为 list
         hsv_values_serializable = {
             key: {

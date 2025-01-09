@@ -24,8 +24,13 @@ class LaserTracker:
         self.mask_window = 'Black Mask'
         cv2.namedWindow(self.result_window)
 
+        # setting.json 设置文件
+        with open('setting.json', 'r') as json_file:
+            data = json.load(json_file)
+        url = data["url"]  # 摄像头配置
+
         # 初始化摄像头
-        self.cap = cv2.VideoCapture(1)  # 根据需要更改摄像头索引
+        self.cap = cv2.VideoCapture(url)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 

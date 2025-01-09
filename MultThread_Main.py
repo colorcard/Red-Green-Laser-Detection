@@ -31,9 +31,13 @@ class LaserTracker:
         cv2.namedWindow('Result')
         self.create_trackbars()
 
+        # setting.json 设置文件
+        with open('setting.json', 'r') as json_file:
+            data = json.load(json_file)
+        url = data["url"]  # 摄像头配置
+
         # 初始化摄像头
-        # 可以修改为自己所需的摄像头编号或视频源
-        self.cap = cv2.VideoCapture(1)
+        self.cap = cv2.VideoCapture(url)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
