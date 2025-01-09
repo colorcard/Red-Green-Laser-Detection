@@ -12,17 +12,19 @@ class LaserTracker:
         self.hsv_values = {
 
 
-            # #适合高纯度
+            #适合高纯度
+            'black': {
+                'low': np.array([0, 0, 0]),  # 黑色区域
+                'high': np.array([180, 255, 60])  # 黑色上限
+            },
+
+            # #适合测试样例的HSV设置
             # 'black': {
-            #     'low': np.array([0, 0, 0]),  # 黑色区域
-            #     'high': np.array([180, 255, 60])  # 黑色上限
+            #     'low': np.array([33, 20, 53]),
+            #     'high': np.array([150, 147, 219])
             # },
 
-            #适合测试样例的HSV设置
-            'black': {
-                'low': np.array([33, 20, 53]),
-                'high': np.array([150, 147, 219])
-            },
+
 
             'red1': {
                 'low': np.array([0, 150, 150]),  # 红色激光笔第一区间
@@ -32,6 +34,10 @@ class LaserTracker:
                 'low': np.array([170, 150, 150]),  # 红色激光笔第二区间
                 'high': np.array([180, 255, 255])
             },
+
+
+
+
             'green': {
                 'low': np.array([45, 150, 150]),  # 绿色激光笔
                 'high': np.array([75, 255, 255])
@@ -169,7 +175,7 @@ class LaserTracker:
 
             # 绘制内框
             if self.inner_rect is not None:
-                cv2.drawContours(frame, [self.inner_rect * 2], 0, (255, 0, 0), 2)
+                cv2.drawContours(frame, [self.inner_rect * 2], 0, (0, 0, 255), 2)
 
             # 添加矩形信息到info_list
             if self.inner_rect is not None:
@@ -184,16 +190,18 @@ class LaserTracker:
         # 激光点信息
         if self.red_point is not None:
             red_x, red_y = self.red_point[0] * 2, self.red_point[1] * 2  # *2因为之前做了降采样
-            cv2.circle(frame, (red_x, red_y), 5, (0, 0, 255), -1)
+            cv2.rectangle(frame, (red_x - 10, red_y - 10), (red_x + 10, red_y + 10), (0, 0, 255), -1)
             position = self.check_point_position((red_x, red_y),
                                                  self.rectangle * 2 if self.rectangle is not None else None)
             info_list.append(f"Red Laser: ({red_x}, {red_y}) - {position}")
 
-            if self.green_point is not None:
-                green_x, green_y = self.green_point[0] * 2, self.green_point[1] * 2
-                cv2.circle(frame, (green_x, green_y), 5, (0, 255, 0), -1)
-                info_list.append(f"Green Laser: ({green_x}, {green_y})")
+        if self.green_point is not None:
+            green_x, green_y = self.green_point[0] * 2, self.green_point[1] * 2
+            cv2.rectangle(frame, (green_x - 10, green_y - 10), (green_x + 10, green_y + 10), (0, 255, 0), -1)
+            info_list.append(f"Green Laser: ({green_x}, {green_y})")
 
+        if self.red_point is not None:
+            if self.green_point is not None:
                 # 计算和显示激光点之间的距离
                 dx = green_x - red_x
                 dy = green_y - red_y
@@ -234,7 +242,7 @@ class LaserTracker:
         # 绘制信息列表
         for i, info in enumerate(info_list):
             cv2.putText(frame, info, (10, 30 + i * 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
 
     def detect_rectangle(self, mask):
         """检测内外矩形"""

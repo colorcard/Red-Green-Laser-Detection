@@ -2,15 +2,15 @@ import cv2
 import numpy as np
 import time
 from datetime import datetime
-
+import threading
 
 class LaserTracker:
     def __init__(self):
-        # 初始化HSV阈值
+        # 初始化 HSV 阈值
         self.hsv_values = {
             'black': {
-                'low': np.array([0, 0, 0]),  # 黑色区域
-                'high': np.array([180, 70, 60])  # 黑色上限
+                'low': np.array([0, 0, 0]),    # 黑色区域
+                'high': np.array([180, 70, 60]) # 黑色上限
             }
         }
 
@@ -20,77 +20,67 @@ class LaserTracker:
         self.start_time = time.time()
         self.processing_time = 0
 
-        # 创建窗口
-        cv2.namedWindow('Result')
-        cv2.namedWindow('Black Mask')
-        self.create_trackbars()
+        # 窗口名称
+        self.result_window = 'Result'
+        self.mask_window = 'Black Mask'
+        cv2.namedWindow(self.result_window)
 
         # 初始化摄像头
-        self.cap = cv2.VideoCapture(1)
+        self.cap = cv2.VideoCapture(1)  # 根据需要更改摄像头索引
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-        # 初始化存储变量
-        self.rectangle = None
-        self.red_point = None
-        self.green_point = None
+        # 线程/共享资源控制
+        self.running = True
+        self.lock = threading.Lock()
+        self.latest_frame = None       # 从捕获线程获取的原始帧
+        self.display_frame = None      # 处理完成后要显示的结果
+        self.mask_for_display = None   # 供显示的掩码
+        self.rectangle = None          # 检测到的矩形
+
+        # 创建 Trackbars
+        self.create_trackbars()
+        # 存储从主线程读取到的 HSV 阈值，以供处理线程访问
+        self.current_hsv_low = self.hsv_values['black']['low'].copy()
+        self.current_hsv_high = self.hsv_values['black']['high'].copy()
 
     def create_trackbars(self):
-        """创建HSV调节滑块"""
-
+        """在窗口中创建 Trackbar 用于动态调节 HSV 阈值"""
         def nothing(x):
             pass
 
-        # 黑色阈值调节 - 使用hsv_values中的初始值
-        cv2.createTrackbar('Black H Low', 'Result', int(self.hsv_values['black']['low'][0]), 255, nothing)
-        cv2.createTrackbar('Black H High', 'Result', int(self.hsv_values['black']['high'][0]), 255, nothing)
-        cv2.createTrackbar('Black S Low', 'Result', int(self.hsv_values['black']['low'][1]), 255, nothing)
-        cv2.createTrackbar('Black S High', 'Result', int(self.hsv_values['black']['high'][1]), 255, nothing)
-        cv2.createTrackbar('Black V Low', 'Result', int(self.hsv_values['black']['low'][2]), 255, nothing)
-        cv2.createTrackbar('Black V High', 'Result', int(self.hsv_values['black']['high'][2]), 255, nothing)
+        cv2.createTrackbar('Black H Low', self.result_window,
+                           int(self.hsv_values['black']['low'][0]), 255, nothing)
+        cv2.createTrackbar('Black H High', self.result_window,
+                           int(self.hsv_values['black']['high'][0]), 255, nothing)
+        cv2.createTrackbar('Black S Low', self.result_window,
+                           int(self.hsv_values['black']['low'][1]), 255, nothing)
+        cv2.createTrackbar('Black S High', self.result_window,
+                           int(self.hsv_values['black']['high'][1]), 255, nothing)
+        cv2.createTrackbar('Black V Low', self.result_window,
+                           int(self.hsv_values['black']['low'][2]), 255, nothing)
+        cv2.createTrackbar('Black V High', self.result_window,
+                           int(self.hsv_values['black']['high'][2]), 255, nothing)
 
-    def update_hsv_values(self):
-        """更新HSV阈值"""
-        # 黑色阈值
-        black_h_low = cv2.getTrackbarPos('Black H Low', 'Result')
-        black_h_high = cv2.getTrackbarPos('Black H High', 'Result')
-        black_s_low = cv2.getTrackbarPos('Black S Low', 'Result')
-        black_s_high = cv2.getTrackbarPos('Black S High', 'Result')
-        black_v_low = cv2.getTrackbarPos('Black V Low', 'Result')
-        black_v_high = cv2.getTrackbarPos('Black V High', 'Result')
+    def read_trackbars_in_main_thread(self):
+        """
+        在主线程中读取当前 Trackbar 值，并保存到共享变量 self.current_hsv_low/high。
+        这能更快地更新滑块值，减少延迟。
+        """
+        black_h_low = cv2.getTrackbarPos('Black H Low', self.result_window)
+        black_h_high = cv2.getTrackbarPos('Black H High', self.result_window)
+        black_s_low = cv2.getTrackbarPos('Black S Low', self.result_window)
+        black_s_high = cv2.getTrackbarPos('Black S High', self.result_window)
+        black_v_low = cv2.getTrackbarPos('Black V Low', self.result_window)
+        black_v_high = cv2.getTrackbarPos('Black V High', self.result_window)
 
-        self.hsv_values['black']['low'] = np.array([black_h_low, black_s_low, black_v_low])
-        self.hsv_values['black']['high'] = np.array([black_h_high, black_s_high, black_v_high])
-
-    def process_frame(self, frame):
-        """处理单帧图像"""
-        start_process = time.time()
-
-
-        # 添加图像预处理步骤
-        # 1. 高斯模糊去噪
-        blurred = cv2.GaussianBlur(frame, (5, 5), 0)
-
-        # 2. 转换到HSV空间
-        hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
-
-        # 更新HSV值（每3帧更新一次）
-        if self.frame_count % 3 == 0:
-            self.update_hsv_values()
-
-        # 生成黑色掩码
-        black_mask = cv2.inRange(hsv, self.hsv_values['black']['low'], self.hsv_values['black']['high'])
-
-        # 显示黑色mask
-        cv2.imshow('Black Mask', black_mask)
-
-        # 检测矩形
-        self.rectangle = self.detect_rectangle(black_mask)
-
-        self.processing_time = time.time() - start_process
+        # 用锁来同步更新当前的低/高阈值
+        with self.lock:
+            self.current_hsv_low = np.array([black_h_low, black_s_low, black_v_low])
+            self.current_hsv_high = np.array([black_h_high, black_s_high, black_v_high])
 
     def detect_rectangle(self, mask):
-        """检测矩形"""
+        """检测最大面积轮廓并判断是否为矩形"""
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if contours:
             max_contour = max(contours, key=cv2.contourArea)
@@ -100,53 +90,155 @@ class LaserTracker:
                 return approx
         return None
 
-    def draw_info(self, frame):
-        """在画面上绘制信息"""
-        # 基础信息
+    def process_frame(self, frame):
+        """
+        对帧进行高斯模糊、HSV 转换以及生成黑色掩码，
+        同时检测矩形，更新处理时间
+        """
+        start_process = time.time()
+
+        # 高斯模糊
+        blurred = cv2.GaussianBlur(frame, (5, 5), 0)
+        hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
+
+        # 从共享变量里获取最新阈值
+        with self.lock:
+            hsv_low = self.current_hsv_low.copy()
+            hsv_high = self.current_hsv_high.copy()
+
+        # 生成黑色掩码
+        black_mask = cv2.inRange(hsv, hsv_low, hsv_high)
+
+        # 检测矩形
+        rect = self.detect_rectangle(black_mask)
+        self.rectangle = rect
+
+        self.processing_time = time.time() - start_process
+        return black_mask
+
+    def draw_info(self, frame, black_mask):
+        """
+        在 frame 上绘制信息（FPS、处理耗时、HSV 参数等），
+        并返回最终可显示的图像
+        """
+        # 绘制文本信息
+        # 从共享变量中获取最新 HSV 阈值仅用于显示
+        with self.lock:
+            hsv_low_display = self.current_hsv_low.copy()
+            hsv_high_display = self.current_hsv_high.copy()
+
         info_list = [
             f"FPS: {self.fps}",
             f"Process Time: {self.processing_time:.3f}s",
             f"Frame Size: {frame.shape[1]}x{frame.shape[0]}",
-            f"Black HSV Low: {self.hsv_values['black']['low']}",
-            f"Black HSV High: {self.hsv_values['black']['high']}"
+            f"Black HSV Low: {hsv_low_display}",
+            f"Black HSV High: {hsv_high_display}"
         ]
 
-        # 矩形信息
+        # 如果检测到矩形，则绘制
         if self.rectangle is not None:
             corners = self.rectangle.reshape(-1, 2)
             info_list.append(f"Rectangle Corners: {corners}")
             cv2.drawContours(frame, [self.rectangle], 0, (0, 255, 0), 2)
 
-        # 绘制信息
+        # 将信息写到帧上
         for i, info in enumerate(info_list):
-            cv2.putText(frame, info, (10, 30 + i * 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
+            cv2.putText(
+                frame, info, (10, 30 + i * 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2
+            )
 
-    def run(self):
-        """主循环"""
-        while True:
+        return frame
+
+    def capture_thread(self):
+        """
+        线程1：捕获摄像头图像，每次读取后放入 shared 变量 latest_frame
+        """
+        while self.running:
             ret, frame = self.cap.read()
             if not ret:
+                print("无法读取摄像头数据，结束捕获线程...")
+                self.running = False
                 break
 
-            self.process_frame(frame)
-            self.draw_info(frame)
+            with self.lock:
+                self.latest_frame = frame.copy()
 
-            # 更新FPS
-            self.frame_count += 1
-            if time.time() - self.start_time > 1:
-                self.fps = self.frame_count
-                self.frame_count = 0
-                self.start_time = time.time()
+            time.sleep(0.001)  # 防止忙等导致CPU过高
 
-            cv2.imshow('Result', frame)
+    def processing_thread(self):
+        """
+        线程2：等待最新帧 -> 处理图像 -> 生成可显示结果和掩码
+        """
+        local_frame_count = 0
+        local_start_time = time.time()
 
+        while self.running:
+            frame_to_process = None
+            with self.lock:
+                if self.latest_frame is not None:
+                    frame_to_process = self.latest_frame.copy()
+
+            if frame_to_process is not None:
+                # 执行图像处理并绘制信息
+                black_mask = self.process_frame(frame_to_process)
+                result_frame = self.draw_info(frame_to_process, black_mask)
+
+                # 计算 FPS
+                local_frame_count += 1
+                if time.time() - local_start_time >= 1.0:
+                    self.fps = local_frame_count
+                    local_frame_count = 0
+                    local_start_time = time.time()
+
+                # 将处理后的帧和掩码存入共享变量
+                with self.lock:
+                    self.display_frame = result_frame.copy()
+                    self.mask_for_display = black_mask.copy()
+            else:
+                time.sleep(0.001)
+
+    def run(self):
+        """
+        主线程：负责显示结果帧 (display_frame) 和黑色掩码 (mask_for_display)，
+        主线程中也读取 Trackbar 值以减少滑块延迟，并监听键盘事件来退出程序
+        """
+        # 启动捕获线程和处理线程
+        t1 = threading.Thread(target=self.capture_thread)
+        t2 = threading.Thread(target=self.processing_thread)
+        t1.start()
+        t2.start()
+
+        while True:
+            # 每次循环都读取滑块，及时更新阈值
+            self.read_trackbars_in_main_thread()
+
+            frame_for_display = None
+            mask_for_display = None
+
+            # 获取处理线程提供的帧/掩码
+            with self.lock:
+                if self.display_frame is not None:
+                    frame_for_display = self.display_frame.copy()
+                if self.mask_for_display is not None:
+                    mask_for_display = self.mask_for_display.copy()
+
+            # 在主线程中进行显示
+            if frame_for_display is not None:
+                cv2.imshow(self.result_window, frame_for_display)
+            if mask_for_display is not None:
+                cv2.imshow(self.mask_window, mask_for_display)
+
+            # 检测退出事件
             if cv2.waitKey(1) & 0xFF == ord('q'):
+                self.running = False
                 break
 
+        # 等待其他线程结束，并释放资源
+        t1.join()
+        t2.join()
         self.cap.release()
         cv2.destroyAllWindows()
-
 
 if __name__ == "__main__":
     tracker = LaserTracker()

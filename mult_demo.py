@@ -1,27 +1,16 @@
 import cv2
 import numpy as np
-# import serial
 import time
 from datetime import datetime
 import threading
-from queue import Queue
-import copy
-
 
 class LaserTracker:
     def __init__(self):
-        # 初始化队列
-        self.frame_queue = Queue(maxsize=30)  # 原始帧队列
-        self.processed_queue = Queue(maxsize=30)  # 处理后的帧队列
-
-        # 线程控制标志
-        self.running = True
-
-        # 保持原有的HSV阈值初始化
+        # 初始化HSV阈值（与原逻辑相同）
         self.hsv_values = {
             'black': {
-                'low': np.array([33, 20, 53]),
-                'high': np.array([150, 147, 219])
+                'low': np.array([0, 0, 0]),
+                'high': np.array([180, 255, 60])
             },
             'red1': {
                 'low': np.array([0, 150, 150]),
@@ -42,6 +31,7 @@ class LaserTracker:
         self.inner_rect = None
         self.red_point = None
         self.green_point = None
+        self.rectangle = None
 
         # 性能追踪变量
         self.frame_count = 0
@@ -49,151 +39,53 @@ class LaserTracker:
         self.start_time = time.time()
         self.processing_time = 0
 
-        # 线程锁
-        self.data_lock = threading.Lock()
-
         # 创建调试窗口
         cv2.namedWindow('Result')
         self.create_trackbars()
 
         # 初始化摄像头
+        # 可以修改为自己所需的摄像头编号或视频源
         self.cap = cv2.VideoCapture(1)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-    def capture_thread(self):
-        """图像采集线程"""
-        while self.running:
-            ret, frame = self.cap.read()
-            if ret:
-                if self.frame_queue.full():
-                    self.frame_queue.get()  # 如果队列满了，移除最旧的帧
-                self.frame_queue.put(frame)
-            else:
-                self.running = False
-                break
+        # 多线程相关变量
+        self.running = True             # 控制线程循环的开关
+        self.frame = None              # 用于存放主线程读取的帧
+        self.lock = threading.Lock()    # 用于线程间同步访问
 
-    def process_thread(self):
-        """图像处理线程"""
-        while self.running:
-            if not self.frame_queue.empty():
-                frame = self.frame_queue.get()
-
-                # 计时开始
-                start_process = time.time()
-
-                # 创建处理结果字典
-                result = {
-                    'frame': frame,
-                    'outer_rect': None,
-                    'inner_rect': None,
-                    'red_point': None,
-                    'green_point': None,
-                    'processing_time': 0
-                }
-
-                # 图像预处理
-                frame_small = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
-                hsv = cv2.cvtColor(frame_small, cv2.COLOR_BGR2HSV)
-
-                # 更新HSV值并进行处理
-                with self.data_lock:
-                    self.update_hsv_values()
-
-                    # 检测黑色矩形
-                    black_mask = cv2.inRange(hsv, self.hsv_values['black']['low'],
-                                             self.hsv_values['black']['high'])
-                    rectangle = self.detect_rectangle(black_mask)
-                    result['outer_rect'] = self.outer_rect
-                    result['inner_rect'] = self.inner_rect
-
-                    # 检测激光点
-                    red_mask1 = cv2.inRange(hsv, self.hsv_values['red1']['low'],
-                                            self.hsv_values['red1']['high'])
-                    red_mask2 = cv2.inRange(hsv, self.hsv_values['red2']['low'],
-                                            self.hsv_values['red2']['high'])
-                    red_mask = cv2.bitwise_or(red_mask1, red_mask2)
-                    result['red_point'] = self.detect_laser(red_mask)
-
-                    green_mask = cv2.inRange(hsv, self.hsv_values['green']['low'],
-                                             self.hsv_values['green']['high'])
-                    result['green_point'] = self.detect_laser(green_mask)
-
-                result['processing_time'] = time.time() - start_process
-
-                if self.processed_queue.full():
-                    self.processed_queue.get()  # 如果队列满了，移除最旧的结果
-                self.processed_queue.put(result)
-
-    def display_thread(self):
-        """显示线程"""
-        while self.running:
-            if not self.processed_queue.empty():
-                result = self.processed_queue.get()
-
-                # 更新类变量
-                with self.data_lock:
-                    self.outer_rect = result['outer_rect']
-                    self.inner_rect = result['inner_rect']
-                    self.red_point = result['red_point']
-                    self.green_point = result['green_point']
-                    self.processing_time = result['processing_time']
-
-                # 绘制信息
-                frame = result['frame'].copy()
-                self.draw_info(frame)
-
-                # 更新FPS
-                self.frame_count += 1
-                if time.time() - self.start_time > 1:
-                    self.fps = self.frame_count
-                    self.frame_count = 0
-                    self.start_time = time.time()
-
-                cv2.imshow('Result', frame)
-
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    self.running = False
-                    break
-
-    def run(self):
-        """启动多线程处理"""
-        # 创建线程
-        capture_thread = threading.Thread(target=self.capture_thread)
-        process_thread = threading.Thread(target=self.process_thread)
-        display_thread = threading.Thread(target=self.display_thread)
-
-        # 启动线程
-        capture_thread.start()
-        process_thread.start()
-        display_thread.start()
-
-        # 等待线程结束
-        capture_thread.join()
-        process_thread.join()
-        display_thread.join()
-
-        # 清理资源
-        self.cap.release()
-        cv2.destroyAllWindows()
+        # 处理过的帧用于在界面上显示（可能是带有信息绘制后的帧）
+        self.display_frame = None
 
     def create_trackbars(self):
         """创建HSV调节滑块"""
-
         def nothing(x):
             pass
+        cv2.createTrackbar('Black H Low', 'Result',
+                           int(self.hsv_values['black']['low'][0]), 255, nothing)
+        cv2.createTrackbar('Black H High', 'Result',
+                           int(self.hsv_values['black']['high'][0]), 255, nothing)
+        cv2.createTrackbar('Black S Low', 'Result',
+                           int(self.hsv_values['black']['low'][1]), 255, nothing)
+        cv2.createTrackbar('Black S High', 'Result',
+                           int(self.hsv_values['black']['high'][1]), 255, nothing)
+        cv2.createTrackbar('Black V Low', 'Result',
+                           int(self.hsv_values['black']['low'][2]), 255, nothing)
+        cv2.createTrackbar('Black V High', 'Result',
+                           int(self.hsv_values['black']['high'][2]), 255, nothing)
 
-        # 黑色阈值调节 - 使用hsv_values中的初始值
-        cv2.createTrackbar('Black H Low', 'Result', int(self.hsv_values['black']['low'][0]), 255, nothing)
-        cv2.createTrackbar('Black H High', 'Result', int(self.hsv_values['black']['high'][0]), 255, nothing)
-        cv2.createTrackbar('Black S Low', 'Result', int(self.hsv_values['black']['low'][1]), 255, nothing)
-        cv2.createTrackbar('Black S High', 'Result', int(self.hsv_values['black']['high'][1]), 255, nothing)
-        cv2.createTrackbar('Black V Low', 'Result', int(self.hsv_values['black']['low'][2]), 255, nothing)
-        cv2.createTrackbar('Black V High', 'Result', int(self.hsv_values['black']['high'][2]), 255, nothing)
+        cv2.createTrackbar('Red S Low', 'Result',
+                           int(self.hsv_values['red1']['low'][1]), 255, nothing)
+        cv2.createTrackbar('Red V Low', 'Result',
+                           int(self.hsv_values['red1']['low'][2]), 255, nothing)
+
+        cv2.createTrackbar('Green H Low', 'Result',
+                           int(self.hsv_values['green']['low'][0]), 180, nothing)
+        cv2.createTrackbar('Green H High', 'Result',
+                           int(self.hsv_values['green']['high'][0]), 180, nothing)
 
     def update_hsv_values(self):
-        """更新HSV阈值"""
-        # 黑色阈值
+        """更新HSV阈值（从Trackbar获取）"""
         black_h_low = cv2.getTrackbarPos('Black H Low', 'Result')
         black_h_high = cv2.getTrackbarPos('Black H High', 'Result')
         black_s_low = cv2.getTrackbarPos('Black S Low', 'Result')
@@ -201,12 +93,75 @@ class LaserTracker:
         black_v_low = cv2.getTrackbarPos('Black V Low', 'Result')
         black_v_high = cv2.getTrackbarPos('Black V High', 'Result')
 
-        self.hsv_values['black']['low'] = np.array([black_h_low, black_s_low, black_v_low])
-        self.hsv_values['black']['high'] = np.array([black_h_high, black_s_high, black_v_high])
+        red_s = cv2.getTrackbarPos('Red S Low', 'Result')
+        red_v = cv2.getTrackbarPos('Red V Low', 'Result')
+        green_h_low = cv2.getTrackbarPos('Green H Low', 'Result')
+        green_h_high = cv2.getTrackbarPos('Green H High', 'Result')
+
+        self.hsv_values['black']['low'][:] = [black_h_low, black_s_low, black_v_low]
+        self.hsv_values['black']['high'][:] = [black_h_high, black_s_high, black_v_high]
+        self.hsv_values['red1']['low'][1:] = [red_s, red_v]
+        self.hsv_values['red2']['low'][1:] = [red_s, red_v]
+        self.hsv_values['green']['low'][0] = green_h_low
+        self.hsv_values['green']['high'][0] = green_h_high
+
+    def processing_loop(self):
+        """
+        独立线程：
+        - 获取最新帧
+        - 执行图像处理
+        - 更新追踪信息
+        - 将结果帧保存到 display_frame
+        """
+        while self.running:
+            # 检查是否有新帧可用
+            frame_to_process = None
+            with self.lock:
+                if self.frame is not None:
+                    # 复制一份，避免直接操作 self.frame
+                    frame_to_process = self.frame.copy()
+
+            if frame_to_process is not None:
+                # 处理帧
+                self.process_frame(frame_to_process)
+                # 绘制信息
+                self.draw_info(frame_to_process)
+                # 将处理完的帧存放以便主线程展示
+                with self.lock:
+                    self.display_frame = frame_to_process
+            else:
+                # 若没有可用帧，稍微休眠
+                time.sleep(0.01)
+
+    def process_frame(self, frame):
+        """单帧处理，与原先逻辑相同"""
+        start_process = time.time()
+        frame_small = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
+        hsv = cv2.cvtColor(frame_small, cv2.COLOR_BGR2HSV)
+
+        self.update_hsv_values()
+
+        black_mask = cv2.inRange(hsv, self.hsv_values['black']['low'], self.hsv_values['black']['high'])
+        self.rectangle = self.detect_rectangle(black_mask)
+
+        red_mask1 = cv2.inRange(hsv, self.hsv_values['red1']['low'], self.hsv_values['red1']['high'])
+        red_mask2 = cv2.inRange(hsv, self.hsv_values['red2']['low'], self.hsv_values['red2']['high'])
+        red_mask = cv2.bitwise_or(red_mask1, red_mask2)
+        self.red_point = self.detect_laser(red_mask)
+
+        green_mask = cv2.inRange(hsv, self.hsv_values['green']['low'], self.hsv_values['green']['high'])
+        self.green_point = self.detect_laser(green_mask)
+
+        # 计算处理时间和FPS
+        self.processing_time = time.time() - start_process
+        self.frame_count += 1
+        if time.time() - self.start_time > 1:
+            self.fps = self.frame_count
+            self.frame_count = 0
+            self.start_time = time.time()
 
     def draw_info(self, frame):
-        """在画面上绘制信息"""
-        # 基础信息
+        """在画面上绘制信息，与原先逻辑相同"""
         info_list = [
             f"DateTime: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             f"FPS: {self.fps}",
@@ -214,17 +169,11 @@ class LaserTracker:
             f"Frame Size: {frame.shape[1]}x{frame.shape[0]}"
         ]
 
-        # 绘制矩形信息
         if self.outer_rect is not None:
             # 绘制外框
             cv2.drawContours(frame, [self.outer_rect * 2], 0, (0, 255, 0), 2)
-
-            # 绘制内框
             if self.inner_rect is not None:
-                cv2.drawContours(frame, [self.inner_rect * 2], 0, (255, 0, 0), 2)
-
-            # 添加矩形信息到info_list
-            if self.inner_rect is not None:
+                cv2.drawContours(frame, [self.inner_rect * 2], 0, (0, 0, 255), 2)
                 outer_corners = self.outer_rect.reshape(-1, 2)
                 inner_corners = self.inner_rect.reshape(-1, 2)
                 info_list.append(f"Outer Rectangle: {outer_corners}")
@@ -233,89 +182,86 @@ class LaserTracker:
                 corners = self.outer_rect.reshape(-1, 2)
                 info_list.append(f"Rectangle Corners: {corners}")
 
-        # 激光点信息
+        # 红色激光点
         if self.red_point is not None:
-            red_x, red_y = self.red_point[0] * 2, self.red_point[1] * 2  # *2因为之前做了降采样
-            cv2.circle(frame, (red_x, red_y), 5, (0, 0, 255), -1)
-            position = self.check_point_position((red_x, red_y),
-                                                 self.rectangle * 2 if self.rectangle is not None else None)
+            red_x, red_y = self.red_point[0] * 2, self.red_point[1] * 2
+            cv2.rectangle(frame, (red_x - 10, red_y - 10),
+                          (red_x + 10, red_y + 10), (0, 0, 255), -1)
+            position = self.check_point_position(
+                (red_x, red_y),
+                self.rectangle * 2 if self.rectangle is not None else None
+            )
             info_list.append(f"Red Laser: ({red_x}, {red_y}) - {position}")
 
-            if self.green_point is not None:
-                green_x, green_y = self.green_point[0] * 2, self.green_point[1] * 2
-                cv2.circle(frame, (green_x, green_y), 5, (0, 255, 0), -1)
-                info_list.append(f"Green Laser: ({green_x}, {green_y})")
+        # 绿色激光点
+        if self.green_point is not None:
+            green_x, green_y = self.green_point[0] * 2, self.green_point[1] * 2
+            cv2.rectangle(frame, (green_x - 10, green_y - 10),
+                          (green_x + 10, green_y + 10), (0, 255, 0), -1)
+            info_list.append(f"Green Laser: ({green_x}, {green_y})")
 
-                # 计算和显示激光点之间的距离
-                dx = green_x - red_x
-                dy = green_y - red_y
-                distance = np.sqrt(dx * dx + dy * dy)
-                info_list.append(f"Laser Distance: {distance:.2f}")
+        # 如果红绿都存在，计算激光点之间距离
+        if self.red_point is not None and self.green_point is not None:
+            dx = (self.green_point[0] - self.red_point[0]) * 2
+            dy = (self.green_point[1] - self.red_point[1]) * 2
+            distance = np.sqrt(dx * dx + dy * dy)
+            info_list.append(f"Laser Distance: {distance:.2f}")
+            cv2.line(frame,
+                     (red_x, red_y), (green_x, green_y),
+                     (255, 255, 0), 2)
+            if distance < 30:
+                text_x = 10
+                text_y = frame.shape[0] - 40
+                text = "OVERLAP!"
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                font_scale = 1
+                thickness = 2
+                (text_width, text_height), _ = cv2.getTextSize(text, font, font_scale, thickness)
+                cv2.rectangle(
+                    frame,
+                    (text_x, text_y - text_height - 5),
+                    (text_x + text_width + 10, text_y + 5),
+                    (0, 0, 0),
+                    -1
+                )
+                cv2.putText(
+                    frame,
+                    text,
+                    (text_x + 5, text_y),
+                    font,
+                    font_scale,
+                    (0, 255, 255),
+                    thickness
+                )
 
-                # 添加距离线
-                cv2.line(frame, (red_x, red_y), (green_x, green_y), (255, 255, 0), 2)
-
-                # 改进OVERLAP显示
-                if distance < 30:
-                    # 确定文本位置
-                    text_x = 10
-                    text_y = frame.shape[0] - 40
-
-                    # 添加黑色背景提高可读性
-                    text = "OVERLAP!"
-                    font = cv2.FONT_HERSHEY_SIMPLEX
-                    font_scale = 1
-                    thickness = 2
-                    (text_width, text_height), _ = cv2.getTextSize(text, font, font_scale, thickness)
-
-                    cv2.rectangle(frame,
-                                  (text_x, text_y - text_height - 5),
-                                  (text_x + text_width + 10, text_y + 5),
-                                  (0, 0, 0),
-                                  -1)
-
-                    # 绘制OVERLAP文本
-                    cv2.putText(frame,
-                                text,
-                                (text_x + 5, text_y),
-                                font,
-                                font_scale,
-                                (0, 255, 255),
-                                thickness)
-
-        # 绘制信息列表
+        # 显示文本信息
         for i, info in enumerate(info_list):
             cv2.putText(frame, info, (10, 30 + i * 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
 
     def detect_rectangle(self, mask):
-        """检测内外矩形"""
-        contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        """检测黑色区域内的外框和内框，与原先逻辑相同"""
+        contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
         inner_rect = None
         outer_rect = None
-
         if contours:
-            # 按面积排序轮廓
             contours = sorted(contours, key=cv2.contourArea, reverse=True)
-
-            for contour in contours[:2]:  # 只处理最大的两个轮廓
+            for contour in contours[:2]:
                 epsilon = 0.02 * cv2.arcLength(contour, True)
                 approx = cv2.approxPolyDP(contour, epsilon, True)
-
-                if len(approx) == 4:  # 确保是四边形
+                if len(approx) == 4:
                     if outer_rect is None:
                         outer_rect = approx
                     else:
                         inner_rect = approx
                         break
-
-        self.inner_rect = inner_rect  # 保存内框
-        self.outer_rect = outer_rect  # 保存外框
-        return outer_rect  # 为保持兼容性，返回外框
+        self.inner_rect = inner_rect
+        self.outer_rect = outer_rect
+        return outer_rect
 
     def detect_laser(self, mask):
-        """检测激光点"""
+        """检测激光点，对应红色或绿色"""
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if contours:
             max_contour = max(contours, key=cv2.contourArea)
@@ -327,35 +273,72 @@ class LaserTracker:
         return None
 
     def check_point_position(self, point, rectangle):
-        """检查点相对于内外矩形的位置"""
+        """判断激光点相对于外框/内框的位置"""
         if point is None or self.outer_rect is None:
             return "unknown"
-
-        # 将坐标转换为相同比例
         outer_rect = self.outer_rect * 2
         inner_rect = self.inner_rect * 2 if self.inner_rect is not None else None
-
-        # 检查外框
         outer_result = cv2.pointPolygonTest(outer_rect, point, False)
 
-        # 如果有内框，检查内框
         if inner_rect is not None:
             inner_result = cv2.pointPolygonTest(inner_rect, point, False)
-
-            if outer_result >= 0:  # 点在外框内或边上
-                if inner_result > 0:  # 点在内框内
+            if outer_result >= 0:
+                if inner_result > 0:
                     return "inside"
-                elif inner_result == 0:  # 点在内框边上
+                elif inner_result == 0:
                     return "between"
-                else:  # 点在胶带区域
+                else:
                     return "between"
-            else:  # 点在外框外
+            else:
                 return "outside"
         else:
-            # 如果没有检测到内框，仅判断外框
-            return "inside" if outer_result > 0 else "outside" if outer_result < 0 else "between"
+            # 若无内框，仅判断外框
+            if outer_result > 0:
+                return "inside"
+            elif outer_result < 0:
+                return "outside"
+            else:
+                return "between"
 
+    def run(self):
+        """
+        主线程负责：
+        - 从摄像头读取帧
+        - 显示最终处理结果 (display_frame)
+        - 处理用户输入（退出程序等）
+        """
 
+        # 启动处理线程
+        processing_thread = threading.Thread(target=self.processing_loop)
+        processing_thread.start()
+
+        while True:
+            ret, frame = self.cap.read()
+            if not ret:
+                print("无法读取摄像头帧，正在退出...")
+                break
+
+            # 将最新的帧交给处理线程
+            with self.lock:
+                self.frame = frame
+
+            # 如果处理线程已经对帧进行了处理，则展示
+            display_copy = None
+            with self.lock:
+                if self.display_frame is not None:
+                    display_copy = self.display_frame.copy()
+
+            if display_copy is not None:
+                cv2.imshow('Result', display_copy)
+
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                self.running = False
+                break
+
+        # 等待处理线程结束
+        processing_thread.join()
+        self.cap.release()
+        cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     tracker = LaserTracker()
