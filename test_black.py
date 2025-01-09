@@ -156,6 +156,10 @@ class LaserTracker:
         """
         while self.running:
             ret, frame = self.cap.read()
+
+            # frame=cv2.cvtColor(frame,cv2.COLOR_BGR2RGB)
+            # 仅在Linux上可能出现的错误使用
+
             if not ret:
                 print("无法读取摄像头数据，结束捕获线程...")
                 self.running = False

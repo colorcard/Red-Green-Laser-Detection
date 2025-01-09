@@ -318,6 +318,9 @@ class LaserTracker:
             if not ret:
                 break
 
+            # frame=cv2.cvtColor(frame,cv2.COLOR_BGR2RGB)
+            # 仅在Linux上可能出现的错误使用
+
             self.process_frame(frame)
             self.draw_info(frame)
 

@@ -318,6 +318,9 @@ class LaserTracker:
                 print("无法读取摄像头帧，正在退出...")
                 break
 
+            # frame=cv2.cvtColor(frame,cv2.COLOR_BGR2RGB)
+            # 仅在Linux上可能出现的错误使用
+
             # 将最新的帧交给处理线程
             with self.lock:
                 self.frame = frame
