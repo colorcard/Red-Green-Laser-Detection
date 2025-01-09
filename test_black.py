@@ -7,8 +7,15 @@ import threading
 
 class LaserTracker:
     def __init__(self):
+
+        # setting.json 设置文件
+        with open('setting.json', 'r') as json_file:
+            data = json.load(json_file)
+        url = data["url"]  # 摄像头配置
+        hsv_config = data["hsv_config_path"]
+
         # 存储json地址
-        self.hsv_config_path = 'hsv_values.json'
+        self.hsv_config_path = hsv_config
 
         # 初始化HSV阈值（与原逻辑相同）
         self.hsv_values = self.load_hsv_values(self.hsv_config_path)
@@ -23,11 +30,6 @@ class LaserTracker:
         self.result_window = 'Result'
         self.mask_window = 'Black Mask'
         cv2.namedWindow(self.result_window)
-
-        # setting.json 设置文件
-        with open('setting.json', 'r') as json_file:
-            data = json.load(json_file)
-        url = data["url"]  # 摄像头配置
 
         # 初始化摄像头
         self.cap = cv2.VideoCapture(url)

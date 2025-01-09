@@ -1,3 +1,4 @@
 {
-  "url": 1
+  "url": 1,
+  "hsv_config_path": "hsv_values.json"
 }
