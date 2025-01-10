@@ -21,6 +21,10 @@ class LaserTracker:
         baud_rate = data["baud_rate"]  # 波特率，根据你的设备设置
         timeout = data["timeout"]  # 超时时间（秒）
 
+        # 窗口尺寸
+        self.width = data["width"]
+        self.height = data["height"]
+
         # 存储json地址
         self.hsv_config_path = hsv_config
 
@@ -377,6 +381,9 @@ class LaserTracker:
         processing_thread = threading.Thread(target=self.processing_loop)
         processing_thread.start()
 
+        cv2.namedWindow('Result', cv2.WINDOW_NORMAL)  # 设置窗口为可调整大小模式
+        cv2.resizeWindow('Result', self.width, self.height) #窗口尺寸
+
         while True:
             ret, frame = self.cap.read()
             if not ret:
@@ -399,6 +406,7 @@ class LaserTracker:
 
 
             if display_copy is not None:
+
                 cv2.imshow('Result', display_copy)
 
             key = cv2.waitKey(1) & 0xFF
