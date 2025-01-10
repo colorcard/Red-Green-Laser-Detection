@@ -5,58 +5,215 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Laser Tracker Live Stream</title>
     <style>
-        /* Reset basic styling */
-        body, h1, p {
-            margin: 0;
-            padding: 0;
-            font-family: Arial, sans-serif;
-        }
+    /* Reset and global styles */
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: Arial, sans-serif;
+    }
 
-        /* Set background and text styling */
-        body {
-            background-color: #1e1e2f;
-            color: #ffffff;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+    body {
+        background-color: #0000ff; /* 深蓝黑色 */
+        color: #e0e1dd; /* 柔和的白色 */
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 20px;
+    }
+
+    h1 {
+        font-size: 2.5rem;
+        margin-bottom: 30px;
+        color: #ffffff; /* 克莱因蓝 */
+    }
+
+    .container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+        max-width: 1200px;
+        width: 100%;
+    }
+
+    .video-container {
+        flex: 2;
+        background: #ffffff; /* 深蓝色 */
+        padding: 10px;
+        border-radius: 10px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    }
+
+    .video-container img {
+        width: 100%;
+        border-radius: 8px;
+        border: 2px solid #ffffff; /* 克莱因蓝边框 */
+    }
+
+    .info-item span{
+        color: #000000;
+    }
+
+    .info-panel {
+        flex: 1;
+        background: #ffffff; /* 深蓝色 */
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        max-height: 600px;
+        overflow-y: auto;
+    }
+
+    .info-panel h2 {
+        font-size: 1.5rem;
+        margin-bottom: 20px;
+        color: #0000ff; /* 克莱因蓝 */
+    }
+
+
+
+    .info-item {
+        margin-bottom: 15px;
+    }
+
+    .info-label {
+        font-weight: bold;
+        color: #0000cc; /* 亮蓝色 */
+    }
+
+    .warning {
+        color: #e63946; /* 鲜红色 */
+        font-weight: bold;
+        animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+        50% { opacity: 0.5; }
+    }
+
+    footer {
+        margin-top: 30px;
+        font-size: 0.9rem;
+        color: #ffffff; /* 柔和的灰蓝色 */
+        text-align: center;
+    }
+
+    @media (max-width: 768px) {
+        .container {
             flex-direction: column;
-            height: 100vh;
-            overflow: hidden;
         }
 
-        h1 {
-            font-size: 2rem;
-            margin-bottom: 20px;
-        }
-
-        /* Style the video container */
-        .video-container {
-            background: #2c2c3e;
-            padding: 10px;
-            border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-            max-width: 90%;
-            width: 800px;
-        }
-
-        img {
+        .video-container, .info-panel {
             width: 100%;
-            border-radius: 8px;
         }
-
-        /* Add footer for branding or additional text */
-        footer {
-            margin-top: 20px;
-            font-size: 0.8rem;
-            color: #aaa;
-        }
-    </style>
+    }
+</style>
 </head>
 <body>
     <h1>Laser Tracker Live Stream</h1>
-    <div class="video-container">
-        <img src="{{ url_for('video_feed') }}" alt="Laser Tracker Stream">
+    <div class="container">
+        <!-- Video Feed Section -->
+        <div class="video-container">
+            <img src="{{ url_for('video_feed') }}" alt="Laser Tracker Stream">
+        </div>
+
+        <!-- Info Panel Section -->
+        <div class="info-panel" id="infoPanel">
+            <h2>Tracker Info</h2>
+            <div class="info-item">
+                <span class="info-label">DateTime:</span>
+                <span id="datetime"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">FPS:</span>
+                <span id="fps"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Process Time:</span>
+                <span id="processTime"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Frame Size:</span>
+                <span id="frameSize"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Outer Rectangle:</span>
+                <span id="outerRectangle"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Inner Rectangle:</span>
+                <span id="innerRectangle"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Red Laser:</span>
+                <span id="redLaser"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Green Laser:</span>
+                <span id="greenLaser"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Laser Distance:</span>
+                <span id="laserDistance"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Status:</span>
+                <span id="overlapWarning"></span>
+            </div>
+        </div>
     </div>
-    <footer>© 2025 Laser Tracker System. All rights reserved.</footer>
+    <footer>© 2025 Laser Tracker System. All rights reserved by ColorCard.</footer>
+
+    <script>
+        function updateInfo() {
+            fetch('/get_info')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('datetime').textContent = data.datetime || 'N/A';
+                    document.getElementById('fps').textContent = data.fps || 'N/A';
+                    document.getElementById('processTime').textContent = data.process_time || 'N/A';
+                    document.getElementById('frameSize').textContent = data.frame_size || 'N/A';
+
+                    if (data.outer_rectangle) {
+                        document.getElementById('outerRectangle').textContent =
+                            JSON.stringify(data.outer_rectangle);
+                    }
+
+                    if (data.inner_rectangle) {
+                        document.getElementById('innerRectangle').textContent =
+                            JSON.stringify(data.inner_rectangle);
+                    }
+
+                    if (data.red_laser) {
+                        document.getElementById('redLaser').textContent =
+                            `(${data.red_laser.x}, ${data.red_laser.y}) - ${data.red_laser.position}`;
+                    }
+
+                    if (data.green_laser) {
+                        document.getElementById('greenLaser').textContent =
+                            `(${data.green_laser.x}, ${data.green_laser.y})`;
+                    }
+
+                    if (data.laser_distance) {
+                        document.getElementById('laserDistance').textContent = data.laser_distance;
+                    }
+
+                    const warningElement = document.getElementById('overlapWarning');
+                    if (data.lasers_overlap) {
+                        warningElement.textContent = 'OVERLAP!';
+                        warningElement.className = 'warning';
+                    } else {
+                        warningElement.textContent = 'Normal';
+                        warningElement.className = '';
+                    }
+                })
+                .catch(error => console.error('Error fetching info:', error));
+        }
+
+        // Update info every 100ms
+        setInterval(updateInfo, 100);
+    </script>
 </body>
 </html>

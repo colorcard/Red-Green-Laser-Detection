@@ -7,7 +7,7 @@ from datetime import datetime
 import threading
 import serial
 import serial.tools.list_ports
-from MultThread_Main import LaserTracker
+from flask import jsonify
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -447,7 +447,7 @@ class LaserTracker:
 
             if display_copy is not None:
                 # Encode the frame for web streaming
-                _, buffer = cv2.imencode('.jpg', display_copy,[cv2.IMWRITE_JPEG_QUALITY, 20])
+                _, buffer = cv2.imencode('.jpg', display_copy,[cv2.IMWRITE_JPEG_QUALITY, 50])
                 frame_bytes = buffer.tobytes()
                 yield (b'--frame\r\n'
                        b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
@@ -477,6 +477,59 @@ class LaserTracker:
             self.serial_thread.join()
         self.cap.release()
 
+    def get_info_dict(self):
+        """Return current tracking information as a dictionary"""
+        info_dict = {
+            'datetime': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'fps': int(self.fps),  # 确保是普通的Python整数
+            'process_time': f'{self.processing_time:.3f}s',
+            'frame_size': f'{self.cap.get(cv2.CAP_PROP_FRAME_WIDTH):.0f}x{self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT):.0f}'
+        }
+
+        if self.outer_rect is not None:
+            # 确保转换为普通的Python列表
+            outer_corners = (self.outer_rect.reshape(-1, 2) * 2).tolist()
+            info_dict['outer_rectangle'] = outer_corners
+        else:
+            # 如果 outer_rect 为 None，则清空 outer_rectangle
+            info_dict['outer_rectangle'] = []
+
+        if self.inner_rect is not None:
+            # 确保转换为普通的Python列表
+            inner_corners = (self.inner_rect.reshape(-1, 2) * 2).tolist()
+            info_dict['inner_rectangle'] = inner_corners
+        else:
+            # 如果 inner_rect 为 None，则清空 inner_rectangle
+            info_dict['inner_rectangle'] = []
+
+        if self.red_point is not None:
+            red_x, red_y = int(self.red_point[0] * 2), int(self.red_point[1] * 2)  # 转换为普通的Python整数
+            position = self.check_point_position(
+                (red_x, red_y),
+                self.rectangle * 2 if self.rectangle is not None else None
+            )
+            info_dict['red_laser'] = {
+                'x': red_x,
+                'y': red_y,
+                'position': str(position)  # 确保position是字符串
+            }
+
+        if self.green_point is not None:
+            green_x, green_y = int(self.green_point[0] * 2), int(self.green_point[1] * 2)  # 转换为普通的Python整数
+            info_dict['green_laser'] = {
+                'x': green_x,
+                'y': green_y
+            }
+
+            if self.red_point is not None:
+                dx = float(green_x - red_x)  # 确保是Python float
+                dy = float(green_y - red_y)  # 确保是Python float
+                distance = float(np.sqrt(dx * dx + dy * dy))  # 确保是Python float
+                info_dict['laser_distance'] = f'{distance:.2f}'
+                info_dict['lasers_overlap'] = bool(distance < 30)  # 转换为Python bool
+
+        return info_dict
+
 
 # Flask routes
 @app.route('/')
@@ -490,6 +543,11 @@ def video_feed():
     """Video streaming route"""
     return Response(tracker.generate_frames(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/get_info')
+def get_info():
+    """Return current tracking information as JSON"""
+    return jsonify(tracker.get_info_dict())
 
 
 if __name__ == "__main__":
