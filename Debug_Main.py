@@ -1,4 +1,3 @@
-# debug_laser_tracker.py
 import cv2
 import numpy as np
 import time
@@ -6,7 +5,7 @@ from datetime import datetime
 import threading
 import serial
 import serial.tools.list_ports
-from MultThread_Main import LaserTracker  # 请将 "your_laser_tracker_file" 替换为实际保存 LaserTracker 类的文件名
+from MultThread_Main import LaserTracker
 
 class DebugLaserTracker(LaserTracker):
     """

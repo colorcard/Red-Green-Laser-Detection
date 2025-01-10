@@ -47,8 +47,8 @@ class LaserTracker:
 
         # 初始化摄像头
         self.cap = cv2.VideoCapture(url)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
         # 多线程相关变量
         self.running = True             # 控制线程循环的开关
