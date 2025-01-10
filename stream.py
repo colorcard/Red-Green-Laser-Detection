@@ -1,3 +1,4 @@
+from flask import Flask, render_template, Response
 import json
 import cv2
 import numpy as np
@@ -6,6 +7,11 @@ from datetime import datetime
 import threading
 import serial
 import serial.tools.list_ports
+from MultThread_Main import LaserTracker
+
+# Initialize Flask app
+app = Flask(__name__)
+
 
 class LaserTracker:
     def __init__(self):
@@ -56,6 +62,8 @@ class LaserTracker:
         self.running = True             # 控制线程循环的开关
         self.frame = None              # 用于存放主线程读取的帧
         self.lock = threading.Lock()    # 用于线程间同步访问
+        self.frame_lock = threading.Lock()
+
 
         # 处理过的帧用于在界面上显示（可能是带有信息绘制后的帧）
         self.display_frame = None
@@ -428,6 +436,69 @@ class LaserTracker:
         self.cap.release()
         cv2.destroyAllWindows()
 
+    def generate_frames(self):
+        """Generator function for streaming frames"""
+        while self.running:
+            # Wait for processed frame
+            display_copy = None
+            with self.lock:
+                if self.display_frame is not None:
+                    display_copy = self.display_frame.copy()
+
+            if display_copy is not None:
+                # Encode the frame for web streaming
+                _, buffer = cv2.imencode('.jpg', display_copy,[cv2.IMWRITE_JPEG_QUALITY, 20])
+                frame_bytes = buffer.tobytes()
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+            time.sleep(0.01)  # Small delay to prevent excessive CPU usage
+
+    def run_with_web(self):
+        """Run the tracker with web streaming instead of local display"""
+        # Start processing thread
+        processing_thread = threading.Thread(target=self.processing_loop)
+        processing_thread.start()
+
+        while self.running:
+            ret, frame = self.cap.read()
+            if not ret:
+                print("Cannot read camera frame, exiting...")
+                break
+
+            with self.lock:
+                self.frame = frame
+
+            time.sleep(0.01)
+
+        # Cleanup
+        processing_thread.join()
+        if self.serial_thread.is_alive():
+            self.serial_thread.join()
+        self.cap.release()
+
+
+# Flask routes
+@app.route('/')
+def index():
+    """Serve the main page"""
+    return render_template('index.html')
+
+
+@app.route('/video_feed')
+def video_feed():
+    """Video streaming route"""
+    return Response(tracker.generate_frames(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
 if __name__ == "__main__":
     tracker = LaserTracker()
-    tracker.run()
+
+    # Start the tracker in a separate thread
+    tracker_thread = threading.Thread(target=tracker.run_with_web)
+    tracker_thread.daemon = True
+    tracker_thread.start()
+
+    # Run the Flask app
+    app.run(host='0.0.0.0', port=8080, debug=False, threaded=True)

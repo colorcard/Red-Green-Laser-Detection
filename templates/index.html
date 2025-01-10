@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laser Tracker Live Stream</title>
+    <style>
+        /* Reset basic styling */
+        body, h1, p {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        /* Set background and text styling */
+        body {
+            background-color: #1e1e2f;
+            color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 20px;
+        }
+
+        /* Style the video container */
+        .video-container {
+            background: #2c2c3e;
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            max-width: 90%;
+            width: 800px;
+        }
+
+        img {
+            width: 100%;
+            border-radius: 8px;
+        }
+
+        /* Add footer for branding or additional text */
+        footer {
+            margin-top: 20px;
+            font-size: 0.8rem;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <h1>Laser Tracker Live Stream</h1>
+    <div class="video-container">
+        <img src="{{ url_for('video_feed') }}" alt="Laser Tracker Stream">
+    </div>
+    <footer>© 2025 Laser Tracker System. All rights reserved.</footer>
+</body>
+</html>

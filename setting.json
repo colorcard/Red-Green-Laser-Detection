@@ -1,9 +1,8 @@
 {
-  "url": 1,
+  "url": 0,
   "hsv_config_path": "hsv_values.json",
   "serial_port": "/dev/cu.usbserial-2140",
   "baud_rate": 115200,
   "timeout": 1,
-  "width": 800,
-  "height": 600
+  "scale_percent": 50
 }
