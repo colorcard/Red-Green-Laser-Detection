@@ -1,5 +1,6 @@
 import serial
 import serial.tools.list_ports
+import json
 
 # 获取所有串口设备实例。
 # 如果没找到串口设备，则输出：“无串口设备。”
@@ -12,10 +13,15 @@ else:
     for comport in ports_list:
         print(list(comport)[0], list(comport)[1])
 
-# 配置串口
-serial_port = '/dev/cu.usbserial-2140'  # 串口设备名称
-baud_rate = 115200  # 波特率，根据你的设备设置
-timeout = 1  # 超时时间（秒）
+
+# setting.json 设置文件
+    with open('setting.json', 'r') as json_file:
+        data = json.load(json_file)
+
+    # 配置串口
+serial_port = data["serial_port"]  # 串口设备名称
+baud_rate = data["baud_rate"]  # 波特率，根据你的设备设置
+timeout = data["timeout"]  # 超时时间（秒）
 
 # 打开串口
 try:
@@ -31,6 +37,7 @@ try:
         if ser.in_waiting:  # 检查是否有数据
             data = ser.readline().decode('utf-8').strip()
             print(f"接收到的数据: {data}")
+
 except serial.SerialException as e:
     print(f"打开串口失败: {e}")
 finally:

@@ -1,4 +1,7 @@
 {
   "url": 1,
-  "hsv_config_path": "hsv_values.json"
+  "hsv_config_path": "hsv_values.json",
+  "serial_port": "/dev/cu.usbserial-2140",
+  "baud_rate": 115200,
+  "timeout": 1
 }

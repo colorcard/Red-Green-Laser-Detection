@@ -4,6 +4,8 @@ import numpy as np
 import time
 from datetime import datetime
 import threading
+import serial
+import serial.tools.list_ports
 
 class LaserTracker:
     def __init__(self):
@@ -13,6 +15,11 @@ class LaserTracker:
             data = json.load(json_file)
         url = data["url"]  # 摄像头配置
         hsv_config = data["hsv_config_path"]
+
+        # 配置串口
+        serial_port = data["serial_port"]  # 串口设备名称
+        baud_rate = data["baud_rate"]  # 波特率，根据你的设备设置
+        timeout = data["timeout"]  # 超时时间（秒）
 
         # 存储json地址
         self.hsv_config_path = hsv_config
@@ -50,6 +57,37 @@ class LaserTracker:
 
         # 处理过的帧用于在界面上显示（可能是带有信息绘制后的帧）
         self.display_frame = None
+
+        # 打开串口
+        try:
+            self.ser = serial.Serial(serial_port, baud_rate, timeout=timeout)
+            print("串口成功打开。")
+        except Exception as e:
+            self.ser = None
+            print(f"串口打开失败： {e}")
+
+        # 启动串口发送线程
+        self.serial_thread = threading.Thread(target=self.serial_loop)
+        self.serial_thread.start()
+
+    def serial_loop(self):
+        """
+        新增线程:
+        定期读取 outer_rect 的四个点 (降采样后乘以 2),
+        以 "@[Message]/r/n" 形式发送到串口。
+        """
+        while self.running:
+            with self.lock:
+                if self.outer_rect is not None:
+                    # 取得外框四个点，乘以 2
+                    corners = (self.outer_rect.reshape(-1, 2) * 2).astype(int)
+                    # 拼接发送字符串
+                    coords_str = ",".join([f"({pt[0]},{pt[1]})" for pt in corners])
+                    message = f"@{coords_str}/r/n"
+                    # 发送至串口
+                    if self.ser and self.ser.is_open:
+                        self.ser.write(message.encode('utf-8'))
+            time.sleep(0.1)
 
     def load_hsv_values(self, file_path):
         """从文件加载 HSV 阈值"""
@@ -374,6 +412,10 @@ class LaserTracker:
 
         # 等待处理线程结束
         processing_thread.join()
+        # 等待串口线程结束
+        if self.serial_thread.is_alive():
+            self.serial_thread.join()
+
         self.cap.release()
         cv2.destroyAllWindows()
 
