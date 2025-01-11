@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laser Tracker Live Stream</title>
+    <style>
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: Arial, sans-serif;
+    }
+
+    body {
+        background-color: #0000ff;
+        color: #e0e1dd;
+        min-height: 100vh;
+        padding: 20px;
+    }
+
+    h1 {
+        text-align: center;
+        margin-bottom: 20px;
+        color: #ffffff;
+    }
+
+    .main-container {
+        display: flex;
+        gap: 20px;
+        max-width: 1800px;
+        margin: 0 auto;
+    }
+
+    .left-panel {
+        flex: 7;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .right-panel {
+        flex: 3;
+        min-width: 300px;
+    }
+
+    .video-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        gap: 15px;
+    }
+
+    .video-container, .mask-container {
+        background: #ffffff;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    }
+
+    .video-container h3, .mask-container h3 {
+        color: #0000ff;
+        margin-bottom: 10px;
+    }
+
+    .video-container img, .mask-container img {
+        width: 100%;
+        height: auto;
+        border-radius: 8px;
+        border: 2px solid #ffffff;
+    }
+
+    .hsv-controls {
+        background: #ffffff;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    }
+
+    .hsv-group {
+        margin-bottom: 25px;
+    }
+
+    .hsv-group:last-child {
+        margin-bottom: 0;
+    }
+
+    .hsv-group h3 {
+        color: #0000ff;
+        margin-bottom: 15px;
+        padding-bottom: 5px;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    .slider-container {
+        display: flex;
+        align-items: center;
+        margin-bottom: 12px;
+    }
+
+    .slider-container label {
+        flex: 0 0 80px;
+        color: #000000;
+    }
+
+    .slider {
+        flex: 1;
+        margin: 0 10px;
+        height: 5px;
+        -webkit-appearance: none;
+        background: #e0e0e0;
+        border-radius: 3px;
+        outline: none;
+    }
+
+    .slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 15px;
+        height: 15px;
+        background: #0000ff;
+        border-radius: 50%;
+        cursor: pointer;
+    }
+
+    .slider-value {
+        flex: 0 0 40px;
+        text-align: right;
+        color: #000000;
+    }
+
+    .info-panel {
+        background: #ffffff;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        height: 100%;
+    }
+
+    .info-panel h2 {
+        color: #0000ff;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #e0e0e0;
+    }
+
+    .info-item {
+    margin-bottom: 15px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 5px;
+    color: #000000; /* 添加这行，将文本颜色设置为黑色 */
+    }
+
+    .info-label {
+        font-weight: bold;
+        color: #000000;
+        margin-right: 10px;
+    }
+
+    /* 添加这个样式，确保数值文本也是黑色 */
+    .info-item span {
+        color: #000000;
+    }
+
+    .warning {
+        color: #ff0000;
+        font-weight: bold;
+        animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+        50% { opacity: 0.5; }
+    }
+
+    footer {
+        text-align: center;
+        margin-top: 20px;
+        padding: 15px;
+        color: #ffffff;
+    }
+
+    @media (max-width: 1400px) {
+        .main-container {
+            flex-direction: column;
+        }
+
+        .right-panel {
+            min-width: 100%;
+        }
+    }
+
+    @media (max-width: 900px) {
+        .video-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .slider-container {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 5px;
+        }
+
+        .slider-container label {
+            width: 100%;
+        }
+
+        .slider {
+            width: 100%;
+            margin: 5px 0;
+        }
+
+        .slider-value {
+            width: 100%;
+            text-align: left;
+        }
+    }
+    </style>
+</head>
+<body>
+    <h1>Laser Tracker Live Stream</h1>
+    <div class="main-container">
+        <div class="left-panel">
+            <!-- 主视频流和遮罩视频网格 -->
+            <div class="video-grid">
+                <div class="video-container">
+                    <h3 style="color: #0000ff;">Main Feed</h3>
+                    <img src="{{ url_for('video_feed') }}" alt="Laser Tracker Stream">
+                </div>
+                <div class="mask-container">
+                    <h3 style="color: #0000ff;">Black Mask</h3>
+                    <img src="{{ url_for('mask_feed', color='black') }}" alt="Black Mask">
+                </div>
+                <div class="mask-container">
+                    <h3 style="color: #0000ff;">Red Mask</h3>
+                    <img src="{{ url_for('mask_feed', color='red') }}" alt="Red Mask">
+                </div>
+                <div class="mask-container">
+                    <h3 style="color: #0000ff;">Green Mask</h3>
+                    <img src="{{ url_for('mask_feed', color='green') }}" alt="Green Mask">
+                </div>
+            </div>
+
+            <!-- HSV 控制滑块 -->
+            <div class="hsv-controls">
+
+                <div class="hsv-group">
+                    <h3>Black Color HSV Controls</h3>
+                    <div class="slider-container">
+                        <label>H Low:</label>
+                        <input type="range" min="0" max="255" value="0" class="slider" id="blackHLow">
+                        <span class="slider-value" id="blackHLowValue">0</span>
+                    </div>
+                    <div class="slider-container">
+                        <label>H High:</label>
+                        <input type="range" min="0" max="255" value="255" class="slider" id="blackHHigh">
+                        <span class="slider-value" id="blackHHighValue">255</span>
+                    </div>
+                    <div class="slider-container">
+                        <label>S Low:</label>
+                        <input type="range" min="0" max="255" value="0" class="slider" id="blackSLow">
+                        <span class="slider-value" id="blackSLowValue">0</span>
+                    </div>
+                    <div class="slider-container">
+                        <label>S High:</label>
+                        <input type="range" min="0" max="255" value="255" class="slider" id="blackSHigh">
+                        <span class="slider-value" id="blackSHighValue">255</span>
+                    </div>
+                    <div class="slider-container">
+                        <label>V Low:</label>
+                        <input type="range" min="0" max="255" value="0" class="slider" id="blackVLow">
+                        <span class="slider-value" id="blackVLowValue">0</span>
+                    </div>
+                    <div class="slider-container">
+                        <label>V High:</label>
+                        <input type="range" min="0" max="255" value="255" class="slider" id="blackVHigh">
+                        <span class="slider-value" id="blackVHighValue">255</span>
+                    </div>
+                </div>
+
+                <div class="hsv-group">
+                    <h3>Red Color HSV Controls</h3>
+                    <div class="slider-container">
+                        <label>H Low:</label>
+                        <input type="range" min="0" max="180" value="0" class="slider" id="redHLow">
+                        <span class="slider-value" id="redHLowValue">0</span>
+                    </div>
+                    <div class="slider-container">
+                        <label>H High:</label>
+                        <input type="range" min="0" max="180" value="180" class="slider" id="redHHigh">
+                        <span class="slider-value" id="redHHighValue">180</span>
+                    </div>
+                    <div class="slider-container">
+                        <label>S Low:</label>
+                        <input type="range" min="0" max="255" value="0" class="slider" id="redSLow">
+                        <span class="slider-value" id="redSLowValue">0</span>
+                    </div>
+                    <div class="slider-container">
+                        <label>S High:</label>
+                        <input type="range" min="0" max="255" value="255" class="slider" id="redSHigh">
+                        <span class="slider-value" id="redSHighValue">255</span>
+                    </div>
+                    <div class="slider-container">
+                        <label>V Low:</label>
+                        <input type="range" min="0" max="255" value="0" class="slider" id="redVLow">
+                        <span class="slider-value" id="redVLowValue">0</span>
+                    </div>
+                    <div class="slider-container">
+                        <label>V High:</label>
+                        <input type="range" min="0" max="255" value="255" class="slider" id="redVHigh">
+                        <span class="slider-value" id="redVHighValue">255</span>
+                    </div>
+                </div>
+
+                <div class="hsv-group">
+                    <h3>Green Color HSV Controls</h3>
+                    <div class="slider-container">
+                        <label>H Low:</label>
+                        <input type="range" min="0" max="180" value="0" class="slider" id="greenHLow">
+                        <span class="slider-value" id="greenHLowValue">0</span>
+                    </div>
+                    <div class="slider-container">
+                        <label>H High:</label>
+                        <input type="range" min="0" max="180" value="180" class="slider" id="greenHHigh">
+                        <span class="slider-value" id="greenHHighValue">180</span>
+                    </div>
+                    <div class="slider-container">
+                        <label>S Low:</label>
+                        <input type="range" min="0" max="255" value="0" class="slider" id="greenSLow">
+                        <span class="slider-value" id="greenSLowValue">0</span>
+                    </div>
+                    <div class="slider-container">
+                        <label>S High:</label>
+                        <input type="range" min="0" max="255" value="255" class="slider" id="greenSHigh">
+                        <span class="slider-value" id="greenSHighValue">255</span>
+                    </div>
+                    <div class="slider-container">
+                        <label>V Low:</label>
+                        <input type="range" min="0" max="255" value="0" class="slider" id="greenVLow">
+                        <span class="slider-value" id="greenVLowValue">0</span>
+                    </div>
+                    <div class="slider-container">
+                        <label>V High:</label>
+                        <input type="range" min="0" max="255" value="255" class="slider" id="greenVHigh">
+                        <span class="slider-value" id="greenVHighValue">255</span>
+                    </div>
+                </div>
+                <div style="text-align: center; margin-top: 20px;">
+                <button id="saveButton" style="
+                    padding: 10px 20px;
+                    font-size: 16px;
+                    background-color: #0000ff;
+                    color: white;
+                    border: none;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    transition: background-color 0.3s;">
+                    Save HSV Values
+                </button>
+                <div id="saveMessage" style="
+                    margin-top: 10px;
+                    padding: 10px;
+                    border-radius: 5px;
+                    display: none;">
+                </div>
+            </div>
+            </div>
+        </div>
+
+
+        <div class="right-panel">
+            <!-- 信息面板 -->
+            <div class="info-panel" id="infoPanel">
+                <!-- 保留原有的信息面板内容 -->
+                <h2>Tracker Info</h2>
+                <div class="info-item">
+                <span class="info-label">DateTime:</span>
+                <span id="datetime"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">FPS:</span>
+                <span id="fps"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Process Time:</span>
+                <span id="processTime"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Frame Size:</span>
+                <span id="frameSize"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Outer Rectangle:</span>
+                <span id="outerRectangle"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Inner Rectangle:</span>
+                <span id="innerRectangle"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Red Laser:</span>
+                <span id="redLaser"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Green Laser:</span>
+                <span id="greenLaser"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Laser Distance:</span>
+                <span id="laserDistance"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Status:</span>
+                <span id="overlapWarning"></span>
+            </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>© 2025 Laser Tracker System. All rights reserved by ColorCard.</footer>
+
+
+    <script>
+        function updateInfo() {
+            fetch('/get_info')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('datetime').textContent = data.datetime || 'N/A';
+                    document.getElementById('fps').textContent = data.fps || 'N/A';
+                    document.getElementById('processTime').textContent = data.process_time || 'N/A';
+                    document.getElementById('frameSize').textContent = data.frame_size || 'N/A';
+
+                    if (data.outer_rectangle) {
+                        document.getElementById('outerRectangle').textContent =
+                            JSON.stringify(data.outer_rectangle);
+                    }
+
+                    if (data.inner_rectangle) {
+                        document.getElementById('innerRectangle').textContent =
+                            JSON.stringify(data.inner_rectangle);
+                    }
+
+                    if (data.red_laser) {
+                        document.getElementById('redLaser').textContent =
+                            `(${data.red_laser.x}, ${data.red_laser.y}) - ${data.red_laser.position}`;
+                    }
+
+                    if (data.green_laser) {
+                        document.getElementById('greenLaser').textContent =
+                            `(${data.green_laser.x}, ${data.green_laser.y})`;
+                    }
+
+                    if (data.laser_distance) {
+                        document.getElementById('laserDistance').textContent = data.laser_distance;
+                    }
+
+                    const warningElement = document.getElementById('overlapWarning');
+                    if (data.lasers_overlap) {
+                        warningElement.textContent = 'OVERLAP!';
+                        warningElement.className = 'warning';
+                    } else {
+                        warningElement.textContent = 'Normal';
+                        warningElement.className = '';
+                    }
+                })
+                .catch(error => console.error('Error fetching info:', error));
+        }
+
+    function initializeSliders() {
+    fetch('/get_hsv_values')
+        .then(response => response.json())
+        .then(data => {
+            // 设置黑色的 HSV 值
+            document.getElementById('blackHLow').value = data.black.low[0];
+            document.getElementById('blackHHigh').value = data.black.high[0];
+            document.getElementById('blackSLow').value = data.black.low[1];
+            document.getElementById('blackSHigh').value = data.black.high[1];
+            document.getElementById('blackVLow').value = data.black.low[2];
+            document.getElementById('blackVHigh').value = data.black.high[2];
+
+            // 设置红色的 HSV 值
+            document.getElementById('redHLow').value = data.red1.low[0];
+            document.getElementById('redHHigh').value = data.red1.high[0];
+            document.getElementById('redSLow').value = data.red1.low[1];
+            document.getElementById('redSHigh').value = data.red1.high[1];
+            document.getElementById('redVLow').value = data.red1.low[2];
+            document.getElementById('redVHigh').value = data.red1.high[2];
+
+            // 设置绿色的 HSV 值
+            document.getElementById('greenHLow').value = data.green.low[0];
+            document.getElementById('greenHHigh').value = data.green.high[0];
+            document.getElementById('greenSLow').value = data.green.low[1];
+            document.getElementById('greenSHigh').value = data.green.high[1];
+            document.getElementById('greenVLow').value = data.green.low[2];
+            document.getElementById('greenVHigh').value = data.green.high[2];
+
+            // 更新显示的值
+            document.querySelectorAll('.slider').forEach(slider => {
+                document.getElementById(slider.id + 'Value').textContent = slider.value;
+            });
+        })
+        .catch(error => console.error('Error fetching HSV values:', error));
+}
+
+
+        // 添加新的 HSV 控制功能
+    function setupHSVControls() {
+    const sliders = document.querySelectorAll('.slider');
+
+    sliders.forEach(slider => {
+        // 更新显示值和发送更新请求
+        slider.addEventListener('input', function() {
+            // 更新显示值
+            document.getElementById(this.id + 'Value').textContent = this.value;
+
+            // 立即发送更新请求
+            const color = this.id.toLowerCase().includes('black') ? 'black' :
+                         this.id.toLowerCase().includes('red') ? 'red' : 'green';
+
+            const params = new URLSearchParams();
+            params.append('color', color);
+
+            if (this.id.includes('HLow')) params.append('h_low', this.value);
+            if (this.id.includes('HHigh')) params.append('h_high', this.value);
+            if (this.id.includes('SLow')) params.append('s_low', this.value);
+            if (this.id.includes('SHigh')) params.append('s_high', this.value);
+            if (this.id.includes('VLow')) params.append('v_low', this.value);
+            if (this.id.includes('VHigh')) params.append('v_high', this.value);
+
+            fetch('/update_hsv?' + params.toString())
+                .catch(error => console.error('Error updating HSV:', error));
+        });
+    });
+}
+
+
+
+    // 添加保存按钮功能
+    document.getElementById('saveButton').addEventListener('click', function() {
+        // 禁用按钮，显示正在保存
+        const button = this;
+        const messageDiv = document.getElementById('saveMessage');
+        button.disabled = true;
+        button.style.backgroundColor = '#cccccc';
+        button.textContent = 'Saving...';
+
+        // 发送保存请求
+        fetch('/save_hsv', {
+            method: 'POST',
+        })
+        .then(response => response.json())
+        .then(data => {
+            messageDiv.style.display = 'block';
+            if (data.status === 'success') {
+                messageDiv.style.backgroundColor = '#4CAF50';
+                messageDiv.style.color = 'white';
+                messageDiv.textContent = 'HSV values saved successfully!';
+            } else {
+                messageDiv.style.backgroundColor = '#f44336';
+                messageDiv.style.color = 'white';
+                messageDiv.textContent = 'Error saving HSV values: ' + data.message;
+            }
+
+            // 3秒后恢复按钮状态并隐藏消息
+            setTimeout(() => {
+                button.disabled = false;
+                button.style.backgroundColor = '#0000ff';
+                button.textContent = 'Save HSV Values';
+                messageDiv.style.display = 'none';
+            }, 3000);
+        })
+        .catch(error => {
+            messageDiv.style.display = 'block';
+            messageDiv.style.backgroundColor = '#f44336';
+            messageDiv.style.color = 'white';
+            messageDiv.textContent = 'Error saving HSV values: ' + error;
+
+            // 恢复按钮状态
+            button.disabled = false;
+            button.style.backgroundColor = '#0000ff';
+            button.textContent = 'Save HSV Values';
+        });
+    });
+    // 页面加载时初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeSliders();  // 首先初始化滑块值
+        setupHSVControls();
+        setInterval(updateInfo, 100);
+    });
+    </script>
+</body>
+</html>
