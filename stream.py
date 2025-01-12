@@ -21,6 +21,7 @@ class LaserTracker:
             data = json.load(json_file)
         url = data["url"]  # 摄像头配置
         hsv_config = data["hsv_config_path"]
+        self.color = data["color"]
 
         # 配置串口
         serial_port = data["serial_port"]  # 串口设备名称
@@ -399,8 +400,7 @@ class LaserTracker:
                 print("无法读取摄像头帧，正在退出...")
                 break
 
-            # frame=cv2.cvtColor(frame,cv2.COLOR_BGR2RGB)
-            # 仅在Linux上可能出现的错误使用
+            
 
             # 将最新的帧交给处理线程
             with self.lock:
@@ -467,6 +467,9 @@ class LaserTracker:
                 break
 
             with self.lock:
+                if (self.color == 1):
+                    frame=cv2.cvtColor(frame,cv2.COLOR_BGR2RGB)
+                # 仅在Linux上可能出现的错误使用
                 self.frame = frame
 
             time.sleep(0.01)
@@ -513,20 +516,36 @@ class LaserTracker:
                 'y': red_y,
                 'position': str(position)  # 确保position是字符串
             }
+        else:
+            info_dict['red_laser'] = {
+                'x': None,
+                'y': None,
+                'position': ' Unknown'
+            }
 
+        # 绿点处理
         if self.green_point is not None:
             green_x, green_y = int(self.green_point[0] * 2), int(self.green_point[1] * 2)  # 转换为普通的Python整数
             info_dict['green_laser'] = {
                 'x': green_x,
                 'y': green_y
             }
+        else:
+            info_dict['green_laser'] = {
+                'x': None,
+                'y': None
+            }
 
-            if self.red_point is not None:
-                dx = float(green_x - red_x)  # 确保是Python float
-                dy = float(green_y - red_y)  # 确保是Python float
-                distance = float(np.sqrt(dx * dx + dy * dy))  # 确保是Python float
-                info_dict['laser_distance'] = f'{distance:.2f}'
-                info_dict['lasers_overlap'] = bool(distance < 30)  # 转换为Python bool
+        # 只有当两个点都存在时才计算距离和重叠状态
+        if self.red_point is not None and self.green_point is not None:
+            dx = float(green_x - red_x)  # 确保是Python float
+            dy = float(green_y - red_y)  # 确保是Python float
+            distance = float(np.sqrt(dx * dx + dy * dy))  # 确保是Python float
+            info_dict['laser_distance'] = f'{distance:.2f}'
+            info_dict['lasers_overlap'] = bool(distance < 30)  # 转换为Python bool
+        else:
+            info_dict['laser_distance'] = None
+            info_dict['lasers_overlap'] = False
 
         return info_dict
 

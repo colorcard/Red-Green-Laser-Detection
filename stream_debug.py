@@ -21,6 +21,7 @@ class LaserTracker:
             data = json.load(json_file)
         url = data["url"]  # 摄像头配置
         hsv_config = data["hsv_config_path"]
+        self.color = data["color"]
 
         # 配置串口
         serial_port = data["serial_port"]  # 串口设备名称
@@ -512,6 +513,9 @@ class LaserTracker:
                 break
 
             with self.lock:
+                if (self.color == 1):
+                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                # 仅在Linux上可能出现的错误使用
                 self.frame = frame
 
             time.sleep(0.01)
