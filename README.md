@@ -1,5 +1,5 @@
 ## 基于 OpenCV - Python 的红绿激光和矩形
-识别以及判断
+基于 OpenCV-Python 的红绿激光和矩形识别以及判断，支持多线程、单线程，GUI、Web调试界面，支持串口通信，可以实时输出红绿激光光点坐标，矩形四个角点坐标，红绿激光光点坐标之差，红绿激光光点重合提醒信息。
 
 ### 实现效果：
 ![img.png](picture/img.png)
@@ -61,6 +61,11 @@
 
 ##### [stream_debug.py](stream_debug.py)
 - 多线程 **Web** 界面，增加了调试功能，可以观察不同颜色的HSV阈值限定效果。
+
+#### STM32程序：
+##### [STM32_Part](STM32_Part)
+- 基于STM32C8T6的OLED显示程序，用于接收串口数据并在OLED上显示。
+
 
 #### 测试程序：
 ##### [serial_test.py](serial_test.py)
