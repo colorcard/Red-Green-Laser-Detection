@@ -84,20 +84,34 @@ class LaserTracker:
     def serial_loop(self):
         """
         新增线程:
-        定期读取 outer_rect 的四个点 (降采样后乘以 2),
+        定期读取 outer_rect 的四个点以及红点和绿点的坐标 (降采样后乘以 2),
         以 "@[Message]/r/n" 形式发送到串口。
         """
         while self.running:
             with self.lock:
+                # 发送外框四个点
                 if self.outer_rect is not None:
                     # 取得外框四个点，乘以 2
                     corners = (self.outer_rect.reshape(-1, 2) * 2).astype(int)
                     # 拼接发送字符串
                     coords_str = ",".join([f"({pt[0]},{pt[1]})" for pt in corners])
-                    message = f"@{coords_str}/r/n"
+                    message = f"@RECT:{coords_str}/r/n"
                     # 发送至串口
                     if self.ser and self.ser.is_open:
                         self.ser.write(message.encode('utf-8'))
+                # 发送红色激光点
+                if self.red_point is not None:
+                    red_x, red_y = int(self.red_point[0] * 2), int(self.red_point[1] * 2)
+                    red_message = f"@RED:({red_x},{red_y})/r/n"
+                    if self.ser and self.ser.is_open:
+                        self.ser.write(red_message.encode('utf-8'))
+                # 发送绿色激光点
+                if self.green_point is not None:
+                    green_x, green_y = int(self.green_point[0] * 2), int(self.green_point[1] * 2)
+                    green_message = f"@GREEN:({green_x},{green_y})/r/n"
+                    if self.ser and self.ser.is_open:
+                        self.ser.write(green_message.encode('utf-8'))
+            # 每次循环间隔
             time.sleep(0.1)
 
     def load_hsv_values(self, file_path):
